@@ -186,6 +186,11 @@ pub const Parser = struct {
             } else if (op_token_type == .bool_op) {
                 const op: BoolExpr = switch (op_token) {
                     .eql => .{ .eql = .{ .lhs = lhs, .rhs = rhs } },
+                    .gt => .{ .gt = .{ .lhs = lhs, .rhs = rhs } },
+                    .ge => .{ .ge = .{ .lhs = lhs, .rhs = rhs } },
+                    .lt => .{ .lt = .{ .lhs = lhs, .rhs = rhs } },
+                    .le => .{ .le = .{ .lhs = lhs, .rhs = rhs } },
+                    .and_ => .{ .and_ = .{ .lhs = lhs, .rhs = rhs } },
                     else => panic("not catch for {}", .{op_token}),
                 };
 

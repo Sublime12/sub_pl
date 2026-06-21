@@ -77,6 +77,28 @@ pub fn register_functions(alloc: Allocator, funs: *Funs) !void {
         };
         try funs.put(alloc, "read_file", read_file_fn);
     }
+    {
+        var slice_args: std.ArrayList([]const u8) = .empty;
+        try slice_args.append(alloc, "str");
+        try slice_args.append(alloc, "begin");
+        try slice_args.append(alloc, "end");
+        const slice_fn: FnExpr = .{
+            .name = "slice",
+            .args = slice_args,
+            .body = .{ .fn_binding = .{ .fn_ = slice } },
+        };
+        try funs.put(alloc, "slice", slice_fn);
+    }
+    // {
+    //     var parse_int_args: std.ArrayList([]const u8) = .empty;
+    //     try parse_int_args.append(alloc, "parse_int");
+    //     const parse_int_fn: FnExpr = .{
+    //         .name = "parse_int",
+    //         .args = parse_int_args,
+    //         .body = .{ .fn_binding = .{ .fn_ = parse_int } },
+    //     };
+    //     try funs.put(alloc, "parse_int", parse_int_fn);
+    // }
 }
 
 fn print(vars: *Vars, ctx: FnCallCtx) Expr {
@@ -120,6 +142,27 @@ fn print_float(vars: *Vars, ctx: FnCallCtx) Expr {
         .as = .{ .void_ = {} },
         .cursor = ctx.cursor,
         .content = ctx.content,
+        .file_path = ctx.file_path,
+    };
+}
+
+fn slice(vars: *Vars, ctx: FnCallCtx) Expr {
+    assert(vars.count() == 3);
+    assert(vars.contains("str"));
+    assert(vars.contains("begin"));
+    assert(vars.contains("end"));
+
+    const str = vars.get("str").?;
+    assert(str.tag() == .str);
+    const begin = vars.get("begin").?;
+    assert(begin.tag() == .int);
+    const end = vars.get("end").?;
+    assert(end.tag() == .int);
+
+    return .{
+        .as = .{ .str = str.str[@intCast(begin.int)..@intCast(end.int)] },
+        .content = ctx.content,
+        .cursor = ctx.cursor,
         .file_path = ctx.file_path,
     };
 }

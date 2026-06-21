@@ -497,7 +497,11 @@ const BoolTag = enum {
     constant,
     eql,
     gt,
+    ge,
     lt,
+    le,
+    and_,
+    or_,
 };
 
 pub const BoolExpr = union(BoolTag) {
@@ -506,7 +510,11 @@ pub const BoolExpr = union(BoolTag) {
     constant: bool,
     eql: BinCmpExpr,
     gt: BinCmpExpr,
+    ge: BinCmpExpr,
     lt: BinCmpExpr,
+    le: BinCmpExpr,
+    and_: BinCmpExpr,
+    or_: BinCmpExpr,
 
     pub fn tag(self: Self) BoolTag {
         return @as(BoolTag, self);
@@ -522,8 +530,24 @@ pub const BoolExpr = union(BoolTag) {
                 expr.print("<");
                 std.debug.print(")", .{});
             },
+            .ge => |expr| {
+                expr.print(">=");
+                std.debug.print(")", .{});
+            },
             .lt => |expr| {
                 expr.print(">");
+                std.debug.print(")", .{});
+            },
+            .le => |expr| {
+                expr.print(">=");
+                std.debug.print(")", .{});
+            },
+            .and_ => |expr| {
+                expr.print("and");
+                std.debug.print(")", .{});
+            },
+            .or_ => |expr| {
+                expr.print("or");
                 std.debug.print(")", .{});
             },
         }

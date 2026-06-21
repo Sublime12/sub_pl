@@ -1,0 +1,15 @@
+# https://adventofcode.com/2025/day/1
+
+let mod = fn x n -> x - ((x / n) * n);
+let neg = fn n -> 0 - n;
+
+let is_int = fn ascii -> if (ascii >= 48) and (ascii <= 57) then true else false;
+# let index_numeric = fn str n -> 
+  
+
+# bind input = read_file("examples/aoc-2025-input.txt",) in
+# bind _ = print_str(slice(input, 0, 10,),) in
+if is_int(getc("a109c", 4,),) then print_str("\ntrue\n",) else print_str("\nfalse\n",);
+struct Point {
+  dir, count,
+};
