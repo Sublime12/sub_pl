@@ -728,3 +728,155 @@ test "parse float division" {
     try expect(.float, rhs.as.arith.tag());
     try expect(2.0, rhs.as.arith.float);
 }
+
+test "parse if with multiple elseif branches" {
+    var arena = arena_alloc();
+    defer arena.deinit();
+    const alloc = arena.allocator();
+
+    const source_code =
+        \\ if x == 1 then "one" elseif x == 2 then "two" elseif x == 3 then "three" else "other";
+    ;
+    var lexer = Lexer.init(source_code, "test.zig");
+    var parser = Parser.init(&lexer, alloc);
+    const expr = try parser.parse();
+
+    try expect(.list, expr.tag());
+    try expect(1, expr.as.list.items.len);
+
+    const if_expr = expr.as.list.items[0];
+    try expect(.if_, if_expr.tag());
+    try expect(2, if_expr.as.if_.elseif_evals.items.len);
+    try expect(2, if_expr.as.if_.elseif_thens.items.len);
+
+    const first_elseif_then = if_expr.as.if_.elseif_thens.items[0];
+    try expect(.str, first_elseif_then.tag());
+    try expectStrings("two", first_elseif_then.as.str);
+
+    const second_elseif_then = if_expr.as.if_.elseif_thens.items[1];
+    try expect(.str, second_elseif_then.tag());
+    try expectStrings("three", second_elseif_then.as.str);
+
+    const else_node = if_expr.as.if_.else_.*;
+    try expect(.str, else_node.tag());
+    try expectStrings("other", else_node.as.str);
+}
+
+test "parse struct definition" {
+    var arena = arena_alloc();
+    defer arena.deinit();
+    const alloc = arena.allocator();
+
+    const source_code =
+        \\ struct Point { x, y, z, };
+    ;
+    var lexer = Lexer.init(source_code, "test.zig");
+    var parser = Parser.init(&lexer, alloc);
+    const expr = try parser.parse();
+
+    try expect(.list, expr.tag());
+    try expect(1, expr.as.list.items.len);
+
+    const struct_def = expr.as.list.items[0];
+    try expect(.struct_, struct_def.tag());
+    try expectStrings("Point", struct_def.as.struct_.name);
+    try expect(3, struct_def.as.struct_.fields.items.len);
+    try expectStrings("x", struct_def.as.struct_.fields.items[0]);
+    try expectStrings("y", struct_def.as.struct_.fields.items[1]);
+    try expectStrings("z", struct_def.as.struct_.fields.items[2]);
+}
+
+test "parse nested parenthesized arithmetic expressions" {
+    var arena = arena_alloc();
+    defer arena.deinit();
+    const alloc = arena.allocator();
+
+    const source_code =
+        \\ (10 + 20) * (30 - 5);
+    ;
+    var lexer = Lexer.init(source_code, "test.zig");
+    var parser = Parser.init(&lexer, alloc);
+    const expr = try parser.parse();
+
+    try expect(.list, expr.tag());
+    try expect(1, expr.as.list.items.len);
+
+    const prod_expr = expr.as.list.items[0];
+    try expect(.arith, prod_expr.tag());
+    try expect(.prod, prod_expr.as.arith.tag());
+
+    const lhs_plus = prod_expr.as.arith.prod.lhs.*;
+    try expect(.plus, lhs_plus.as.arith.tag());
+
+    const rhs_minus = prod_expr.as.arith.prod.rhs.*;
+    try expect(.minus, rhs_minus.as.arith.tag());
+}
+
+test "parse string with escaped newline" {
+    var arena = arena_alloc();
+    defer arena.deinit();
+    const alloc = arena.allocator();
+
+    const source_code =
+        \\ print_str("hello\nworld",);
+    ;
+    var lexer = Lexer.init(source_code, "test.zig");
+    var parser = Parser.init(&lexer, alloc);
+    const expr = try parser.parse();
+
+    try expect(.list, expr.tag());
+    try expect(1, expr.as.list.items.len);
+
+    const fn_call = expr.as.list.items[0];
+    try expect(.fn_call, fn_call.tag());
+    const str_arg = fn_call.as.fn_call.args.items[0];
+    try expect(.str, str_arg.tag());
+    try expectStrings("hello\nworld", str_arg.as.str);
+}
+
+test "parse comparison operations" {
+    var arena = arena_alloc();
+    defer arena.deinit();
+    const alloc = arena.allocator();
+
+    const source_code =
+        \\ a < 10;
+    ;
+    var lexer = Lexer.init(source_code, "test.zig");
+    var parser = Parser.init(&lexer, alloc);
+    const expr = try parser.parse();
+
+    try expect(.list, expr.tag());
+    try expect(1, expr.as.list.items.len);
+
+    const lt_expr = expr.as.list.items[0];
+    try expect(.bool_, lt_expr.tag());
+    try expect(.lt, lt_expr.as.bool_.tag());
+}
+
+test "parse zero-arg function call and multiple statements" {
+    var arena = arena_alloc();
+    defer arena.deinit();
+    const alloc = arena.allocator();
+
+    const source_code =
+        \\ get_time();
+        \\ print_str("done",);
+    ;
+    var lexer = Lexer.init(source_code, "test.zig");
+    var parser = Parser.init(&lexer, alloc);
+    const expr = try parser.parse();
+
+    try expect(.list, expr.tag());
+    try expect(2, expr.as.list.items.len);
+
+    const first_call = expr.as.list.items[0];
+    try expect(.fn_call, first_call.tag());
+    try expectStrings("get_time", first_call.as.fn_call.name);
+    try expect(0, first_call.as.fn_call.args.items.len);
+
+    const second_call = expr.as.list.items[1];
+    try expect(.fn_call, second_call.tag());
+    try expectStrings("print_str", second_call.as.fn_call.name);
+    try expect(1, second_call.as.fn_call.args.items.len);
+}
