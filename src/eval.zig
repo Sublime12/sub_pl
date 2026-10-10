@@ -522,19 +522,51 @@ fn eval_bool(expr: BoolExpr, ctx: Context, local_vars: *Vars, cursor: Cursor) Ex
                 .file_path = ctx.file_path,
             };
         },
-        .and_,
-        .or_,
-        => |bin_expr| {
+        .and_ => |bin_expr| {
             const lhs = eval(bin_expr.lhs.*, ctx, local_vars);
+            assert_of_type(lhs, lhs.tag() == .bool_);
+            if (!lhs.as.bool_.constant) {
+                return .{
+                    .as = .{ .bool_ = .{ .constant = false } },
+                    .content = ctx.content,
+                    .cursor = cursor,
+                    .file_path = ctx.file_path,
+                };
+            }
+
             const rhs = eval(bin_expr.rhs.*, ctx, local_vars);
 
-            assert_of_type(lhs, lhs.tag() == .bool_);
             assert_of_type(rhs, rhs.tag() == .bool_);
 
-            const result: BoolExpr = switch (expr) {
-                .and_ => .{ .constant = (lhs.as.bool_.constant and rhs.as.bool_.constant) },
-                .or_ => .{ .constant = (lhs.as.bool_.constant or rhs.as.bool_.constant) },
-                else => unreachable,
+            const result: BoolExpr = .{
+                .constant = (lhs.as.bool_.constant and rhs.as.bool_.constant),
+            };
+
+            return .{
+                .as = .{ .bool_ = result },
+                .content = ctx.content,
+                .cursor = cursor,
+                .file_path = ctx.file_path,
+            };
+        },
+        .or_ => |bin_expr| {
+            const lhs = eval(bin_expr.lhs.*, ctx, local_vars);
+            assert_of_type(lhs, lhs.tag() == .bool_);
+            if (lhs.as.bool_.constant) {
+                return .{
+                    .as = .{ .bool_ = .{ .constant = true } },
+                    .content = ctx.content,
+                    .cursor = cursor,
+                    .file_path = ctx.file_path,
+                };
+            }
+
+            // panic("rhs executed ", .{});
+            const rhs = eval(bin_expr.rhs.*, ctx, local_vars);
+            assert_of_type(rhs, rhs.tag() == .bool_);
+
+            const result: BoolExpr = .{
+                .constant = (lhs.as.bool_.constant and rhs.as.bool_.constant),
             };
 
             return .{

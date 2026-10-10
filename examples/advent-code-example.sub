@@ -2,14 +2,38 @@
 
 let mod = fn x n -> x - ((x / n) * n);
 let neg = fn n -> 0 - n;
+let not = fn cond -> if cond then false else true;
 
 let is_int = fn ascii -> if (ascii >= 48) and (ascii <= 57) then true else false;
-# let index_numeric = fn str n -> 
-  
+# find the index after the first non numeric integer
+let index_numeric = fn str n ->
+  if (n < len(str,)) and is_int(getc(str, n,),) then
+    index_numeric(str, n + 1,)
+  else n
+;
+# print_int(index_numeric("012ba", 0,),);
 
-# bind input = read_file("examples/aoc-2025-input.txt",) in
-# bind _ = print_str(slice(input, 0, 10,),) in
-if is_int(getc("a109c", 4,),) then print_str("\ntrue\n",) else print_str("\nfalse\n",);
+
+bind input = read_file("examples/aoc-2025-input.txt",) in
+bind end_slice = index_numeric(input, 1,) in
+bind sliced_input = slice(input, 1, end_slice,) in
+# bind _a = print_str("\n==============\n",) in
+# bind _b = print_int(end_slice,) in
+# bind _c = print_str(input,) in
+# bind _d = print_str("slice input: \n",) in
+bind rotation = parse_int(sliced_input,) in
+print_int(rotation + 10,);
+
+
+## bind _ = print_str(slice(input, 0, 10,),) in
+#if is_int(getc("a109c", 4,),) then print_str("\ntrue\n",) else print_str("\nfalse\n",);
 struct Point {
-  dir, count,
+ dir, count,
+};
+
+struct PointList {
+  # A point
+  current,
+  # PointList | Null
+  next,
 };

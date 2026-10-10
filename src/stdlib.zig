@@ -22,7 +22,7 @@ pub fn register_functions(alloc: Allocator, funs: *Funs) !void {
         const print_fn: FnExpr = .{
             .name = "print",
             .args = print_args,
-            .body = .{ .fn_binding = .{ .fn_ = print } },
+            .body = .{ .fn_binding = .{ .fn_ = print_char } },
         };
         try funs.put(alloc, "print", print_fn);
     }
@@ -57,6 +57,16 @@ pub fn register_functions(alloc: Allocator, funs: *Funs) !void {
         try funs.put(alloc, "print_str", print_str_fn);
     }
     {
+        var len_args: std.ArrayList([]const u8) = .empty;
+        try len_args.append(alloc, "str");
+        const len_fn: FnExpr = .{
+            .name = "len",
+            .args = len_args,
+            .body = .{ .fn_binding = .{ .fn_ = len } },
+        };
+        try funs.put(alloc, "len", len_fn);
+    }
+    {
         var getc_args: std.ArrayList([]const u8) = .empty;
         try getc_args.append(alloc, "str");
         try getc_args.append(alloc, "i");
@@ -89,19 +99,19 @@ pub fn register_functions(alloc: Allocator, funs: *Funs) !void {
         };
         try funs.put(alloc, "slice", slice_fn);
     }
-    // {
-    //     var parse_int_args: std.ArrayList([]const u8) = .empty;
-    //     try parse_int_args.append(alloc, "parse_int");
-    //     const parse_int_fn: FnExpr = .{
-    //         .name = "parse_int",
-    //         .args = parse_int_args,
-    //         .body = .{ .fn_binding = .{ .fn_ = parse_int } },
-    //     };
-    //     try funs.put(alloc, "parse_int", parse_int_fn);
-    // }
+    {
+        var parse_int_args: std.ArrayList([]const u8) = .empty;
+        try parse_int_args.append(alloc, "str");
+        const parse_int_fn: FnExpr = .{
+            .name = "parse_int",
+            .args = parse_int_args,
+            .body = .{ .fn_binding = .{ .fn_ = parse_int } },
+        };
+        try funs.put(alloc, "parse_int", parse_int_fn);
+    }
 }
 
-fn print(vars: *Vars, ctx: FnCallCtx) Expr {
+fn print_char(vars: *Vars, ctx: FnCallCtx) Expr {
     assert(vars.count() == 1);
     assert(vars.contains("c"));
     const c = vars.get("c").?;
@@ -167,6 +177,21 @@ fn slice(vars: *Vars, ctx: FnCallCtx) Expr {
     };
 }
 
+fn parse_int(vars: *Vars, ctx: FnCallCtx) Expr {
+    assert(vars.count() == 1);
+    assert(vars.contains("str"));
+    const str = vars.get("str").?;
+    assert(str.tag() == .str);
+
+    const number = std.fmt.parseInt(i32, str.str, 10) catch unreachable;
+    return .{
+        .as = .{ .arith = .{ .int = number } },
+        .content = ctx.content,
+        .cursor = ctx.cursor,
+        .file_path = ctx.file_path,
+    };
+}
+
 fn print_str(vars: *Vars, ctx: FnCallCtx) Expr {
     assert(vars.count() == 1);
     assert(vars.contains("str"));
@@ -176,6 +201,20 @@ fn print_str(vars: *Vars, ctx: FnCallCtx) Expr {
     std.debug.print("{s}", .{str.str});
     return .{
         .as = .{ .void_ = {} },
+        .cursor = ctx.cursor,
+        .content = ctx.content,
+        .file_path = ctx.file_path,
+    };
+}
+
+fn len(vars: *Vars, ctx: FnCallCtx) Expr {
+    assert(vars.count() == 1);
+    assert(vars.contains("str"));
+    const str = vars.get("str").?;
+
+    assert(str.tag() == .str);
+    return .{
+        .as = .{ .arith = .{ .int = @intCast(str.str.len) } },
         .cursor = ctx.cursor,
         .content = ctx.content,
         .file_path = ctx.file_path,

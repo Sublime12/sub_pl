@@ -191,6 +191,7 @@ pub const Parser = struct {
                     .lt => .{ .lt = .{ .lhs = lhs, .rhs = rhs } },
                     .le => .{ .le = .{ .lhs = lhs, .rhs = rhs } },
                     .and_ => .{ .and_ = .{ .lhs = lhs, .rhs = rhs } },
+                    .or_ => .{ .or_ = .{ .lhs = lhs, .rhs = rhs } },
                     else => panic("not catch for {}", .{op_token}),
                 };
 
