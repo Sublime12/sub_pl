@@ -4,6 +4,12 @@ const builtin = @import("builtin");
 const expression_pkg = @import("expression.zig");
 const stdlib_pkg = @import("stdlib.zig");
 const lexer_pkg = @import("lexer.zig");
+const parser_pkg = @import("parser.zig");
+
+const Parser = parser_pkg.Parser;
+const Lexer = lexer_pkg.Lexer;
+const expect = std.testing.expectEqual;
+const expectStrings = std.testing.expectEqualStrings;
 
 const Allocator = std.mem.Allocator;
 
@@ -563,12 +569,11 @@ fn eval_bool(expr: BoolExpr, ctx: Context, local_vars: *Vars, cursor: Cursor) Ex
                 };
             }
 
-            // panic("rhs executed ", .{});
             const rhs = eval(bin_expr.rhs.*, ctx, local_vars);
             assert_of_type(rhs, rhs.tag() == .bool_);
 
             const result: BoolExpr = .{
-                .constant = (lhs.as.bool_.constant and rhs.as.bool_.constant),
+                .constant = (lhs.as.bool_.constant or rhs.as.bool_.constant),
             };
 
             return .{
@@ -606,3 +611,210 @@ const Var = union(VarTag) {
 };
 
 pub const Vars = std.StringHashMap(Var);
+
+fn arena_alloc() std.heap.ArenaAllocator {
+    return std.heap.ArenaAllocator.init(std.testing.allocator);
+}
+
+pub fn eval_source(alloc: Allocator, source: []const u8) !Expr {
+    var lexer = Lexer.init(source, "test.sub");
+    var parser = Parser.init(&lexer, alloc);
+    const expr = try parser.parse();
+    const io: std.Io = if (builtin.is_test) std.testing.io else undefined;
+    const ctx = try build_context(expr, alloc, source, "test.sub", io);
+    sema(expr, ctx);
+    var local_vars: Vars = .init(alloc);
+    defer local_vars.deinit();
+    return eval(expr, ctx, &local_vars);
+}
+
+test "eval int arithmetic with precedence and parentheses" {
+    var arena = arena_alloc();
+    defer arena.deinit();
+    const alloc = arena.allocator();
+
+    const res1 = try eval_source(alloc, "10 + (20 * 3) - 5;");
+    try expect(.arith, res1.tag());
+    try expect(65, res1.as.arith.int);
+
+    const res2 = try eval_source(alloc, "(10 + 20) * (3 - 1);");
+    try expect(.arith, res2.tag());
+    try expect(60, res2.as.arith.int);
+
+    // sub_pl parses sequentially left-to-right without operator precedence
+    const res3 = try eval_source(alloc, "10 + 20 * 3 - 5;");
+    try expect(.arith, res3.tag());
+    try expect(85, res3.as.arith.int);
+}
+
+test "eval integer division" {
+    var arena = arena_alloc();
+    defer arena.deinit();
+    const alloc = arena.allocator();
+
+    const res = try eval_source(alloc, "100 / 4 / 5;");
+    try expect(.arith, res.tag());
+    try expect(5, res.as.arith.int);
+}
+
+test "eval float arithmetic" {
+    var arena = arena_alloc();
+    defer arena.deinit();
+    const alloc = arena.allocator();
+
+    const res = try eval_source(alloc, "12.5 + (2.5 * 2.0);");
+    try expect(.arith, res.tag());
+    try expect(17.5, res.as.arith.float);
+}
+
+test "eval equality and relational operators" {
+    var arena = arena_alloc();
+    defer arena.deinit();
+    const alloc = arena.allocator();
+
+    const res1 = try eval_source(alloc, "10 == 10;");
+    try expect(true, res1.as.bool_.constant);
+
+    const res2 = try eval_source(alloc, "10 == 20;");
+    try expect(false, res2.as.bool_.constant);
+
+    const res3 = try eval_source(alloc, "5 < 10;");
+    try expect(true, res3.as.bool_.constant);
+
+    const res4 = try eval_source(alloc, "10 <= 10;");
+    try expect(true, res4.as.bool_.constant);
+
+    const res5 = try eval_source(alloc, "20 > 5;");
+    try expect(true, res5.as.bool_.constant);
+
+    const res6 = try eval_source(alloc, "5 >= 6;");
+    try expect(false, res6.as.bool_.constant);
+}
+
+test "eval logical and / or" {
+    var arena = arena_alloc();
+    defer arena.deinit();
+    const alloc = arena.allocator();
+
+    const res1 = try eval_source(alloc, "(10 > 5) and (2 == 2);");
+    try expect(true, res1.as.bool_.constant);
+
+    const res2 = try eval_source(alloc, "(1 == 2) or (3 == 3);");
+    try expect(true, res2.as.bool_.constant);
+
+    const res3 = try eval_source(alloc, "(1 == 2) and (3 == 3);");
+    try expect(false, res3.as.bool_.constant);
+
+    const res4 = try eval_source(alloc, "(1 == 2) or (3 == 4);");
+    try expect(false, res4.as.bool_.constant);
+}
+
+test "eval if-then-else and elseif branches" {
+    var arena = arena_alloc();
+    defer arena.deinit();
+    const alloc = arena.allocator();
+
+    const res1 = try eval_source(alloc, "if 10 > 5 then 100 else 200;");
+    try expect(100, res1.as.arith.int);
+
+    const res2 = try eval_source(alloc, "if 5 > 10 then 100 else 200;");
+    try expect(200, res2.as.arith.int);
+
+    const res3 = try eval_source(alloc, "bind x = 2 in if x == 1 then 10 elseif x == 2 then 20 else 30;");
+    try expect(20, res3.as.arith.int);
+
+    const res4 = try eval_source(alloc, "10 + (if 1 == 1 then 5 else 0);");
+    try expect(15, res4.as.arith.int);
+}
+
+test "eval variable binding and sequential scopes" {
+    var arena = arena_alloc();
+    defer arena.deinit();
+    const alloc = arena.allocator();
+
+    const res1 = try eval_source(alloc, "bind a = 15 in a * 2;");
+    try expect(30, res1.as.arith.int);
+
+    const res2 = try eval_source(alloc, "bind a = 10 in bind b = a * 2 in a + b;");
+    try expect(30, res2.as.arith.int);
+
+    const res3 = try eval_source(alloc, "bind a = 1 in bind b = 2 in bind c = 3 in a + b + c;");
+    try expect(6, res3.as.arith.int);
+}
+
+test "eval multi-arg function definition and call" {
+    var arena = arena_alloc();
+    defer arena.deinit();
+    const alloc = arena.allocator();
+
+    const res1 = try eval_source(alloc, "let add3 = fn a b c -> a + b + c; add3(1, 2, 3,);");
+    try expect(6, res1.as.arith.int);
+
+    const res2 = try eval_source(alloc, "let double = fn x -> x * 2; let inc = fn x -> x + 1; double(inc(5,),);");
+    try expect(12, res2.as.arith.int);
+}
+
+test "eval recursive function factorial and fibonacci" {
+    var arena = arena_alloc();
+    defer arena.deinit();
+    const alloc = arena.allocator();
+
+    const res1 = try eval_source(alloc, "let fact = fn n -> if n == 1 then 1 else n * fact(n - 1,); fact(5,);");
+    try expect(120, res1.as.arith.int);
+
+    const res2 = try eval_source(alloc, "let fib = fn n -> if n <= 1 then n else fib(n - 1,) + fib(n - 2,); fib(7,);");
+    try expect(13, res2.as.arith.int);
+}
+
+test "eval struct instantiation and field access" {
+    var arena = arena_alloc();
+    defer arena.deinit();
+    const alloc = arena.allocator();
+
+    const source =
+        \\ struct Point { x, y, };
+        \\ bind p = @Point{ .x = 10, .y = 20, } in p.x + (p.y);
+    ;
+    const res = try eval_source(alloc, source);
+    try expect(30, res.as.arith.int);
+}
+
+test "eval struct as function parameter and return value" {
+    var arena = arena_alloc();
+    defer arena.deinit();
+    const alloc = arena.allocator();
+
+    const source1 =
+        \\ struct Point { x, y, };
+        \\ let get_x = fn pt -> pt.x;
+        \\ get_x(@Point{ .x = 42, .y = 0, },);
+    ;
+    const res1 = try eval_source(alloc, source1);
+    try expect(42, res1.as.arith.int);
+
+    const source2 =
+        \\ struct Point { x, y, };
+        \\ let make_pt = fn x y -> @Point{ .x = x, .y = y, };
+        \\ bind p = make_pt(3, 4,) in p.x;
+    ;
+    const res2 = try eval_source(alloc, source2);
+    try expect(3, res2.as.arith.int);
+}
+
+test "eval stdlib functions len, getc, slice, parse_int" {
+    var arena = arena_alloc();
+    defer arena.deinit();
+    const alloc = arena.allocator();
+
+    const res1 = try eval_source(alloc, "len(\"hello world\",);");
+    try expect(11, res1.as.arith.int);
+
+    const res2 = try eval_source(alloc, "getc(\"ABC\", 1,);");
+    try expect(66, res2.as.arith.int);
+
+    const res3 = try eval_source(alloc, "slice(\"abcdef\", 1, 4,);");
+    try expectStrings("bcd", res3.as.str);
+
+    const res4 = try eval_source(alloc, "parse_int(\"1234\",) + 6;");
+    try expect(1240, res4.as.arith.int);
+}
