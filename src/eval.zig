@@ -297,7 +297,7 @@ fn eval_fn_call(expr: FnCallExpr, ctx: Context, local_vars: *Vars, cursor: Curso
         const arg_eval = eval(arg, ctx, local_vars);
         assert_of_type(
             arg_eval,
-            arg_eval.tag() == .bool_ or arg_eval.tag() == .arith or arg_eval.tag() == .str,
+            arg_eval.tag() == .bool_ or arg_eval.tag() == .arith or arg_eval.tag() == .str or arg_eval.is_struct_instance(),
         );
         const var_: Var = if (arg_eval.tag() == .bool_)
             .{ .bool_ = arg_eval.as.bool_.constant }
@@ -307,6 +307,8 @@ fn eval_fn_call(expr: FnCallExpr, ctx: Context, local_vars: *Vars, cursor: Curso
             .{ .float = arg_eval.as.arith.float }
         else if (arg_eval.tag() == .str)
             .{ .str = arg_eval.as.str }
+        else if (arg_eval.is_struct_instance())
+            .{ .struct_instance = arg_eval.as.struct_instance }
         else
             panic("unhandled case", .{});
         fn_params.putNoClobber(arg_name, var_) catch unreachable;
