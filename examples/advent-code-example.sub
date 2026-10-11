@@ -53,10 +53,10 @@ let process_command = fn str state len_str ->
 bind input = read_file("examples/aoc-2025-input.txt",) in
 bind total_len = len(input,) in
 bind initial_state = @State{ .idx = 0, .pos = 50, .zero_count = 0, } in
-bind final_state = process_command(input, initial_state, total_len,) in
-
-bind _a = print_str("Part 1 Final Position: ",) in
-bind _b = print_int(final_state.pos,) in
-bind _c = print_str("\nPart 2 Zero Count: ",) in
-bind _d = print_int(final_state.zero_count,) in
+# bind final_state = process_command(input, initial_state, total_len,) in
+# 
+# bind _a = print_str("Part 1 Final Position: ",) in
+# bind _b = print_int(final_state.pos,) in
+# bind _c = print_str("\nPart 2 Zero Count: ",) in
+# bind _d = print_int(final_state.zero_count,) in
 print_str("\n",);
