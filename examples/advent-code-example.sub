@@ -1,0 +1,62 @@
+# Advent of Code 2025 Day 1: Secret Entrance
+# Solved in sub_pl
+
+struct State {
+  idx, pos, zero_count,
+};
+
+let mod = fn x n -> x - ((x / n) * n);
+let is_digit = fn c -> if (c >= 48) and (c <= 57) then true else false;
+
+# Skip whitespace (\n, \r, spaces)
+let skip_whitespace = fn str idx len_str ->
+  if (idx < len_str) and (getc(str, idx,) < 65) then
+    skip_whitespace(str, idx + 1, len_str,)
+  else idx
+;
+
+# Find end of numeric value
+let find_num_end = fn str idx len_str ->
+  if (idx < len_str) and is_digit(getc(str, idx,),) then
+    find_num_end(str, idx + 1, len_str,)
+  else idx
+;
+
+# Process rotation instructions (L or R) recursively
+let process_command = fn str state len_str ->
+  bind start_idx = skip_whitespace(str, state.idx, len_str,) in
+  if start_idx >= len_str then
+    state
+  else
+    bind dir_char = getc(str, start_idx,) in
+    bind num_start = start_idx + 1 in
+    bind num_end = find_num_end(str, num_start, len_str,) in
+    bind num_str = slice(str, num_start, num_end,) in
+    bind val = parse_int(num_str,) in
+    bind pos = state.pos in
+    bind zero_count = state.zero_count in
+
+    if dir_char == 82 then
+      # Right (R): clockwise turn
+      bind new_pos = mod(pos + val, 100,) in
+      bind new_zero_count = zero_count + ((pos + val) / 100) in
+      process_command(str, @State{ .idx = num_end, .pos = new_pos, .zero_count = new_zero_count, }, len_str,)
+    else
+      # Left (L): counter-clockwise turn
+      bind passes = if pos == 0 then (val / 100) else (if val >= pos then (1 + ((val - pos) / 100)) else 0) in
+      bind raw_pos = mod(pos - (mod(val, 100,)), 100,) in
+      bind new_pos = if raw_pos < 0 then raw_pos + 100 else raw_pos in
+      bind new_zero_count = zero_count + passes in
+      process_command(str, @State{ .idx = num_end, .pos = new_pos, .zero_count = new_zero_count, }, len_str,)
+;
+
+bind input = read_file("examples/aoc-2025-input.txt",) in
+bind total_len = len(input,) in
+bind initial_state = @State{ .idx = 0, .pos = 50, .zero_count = 0, } in
+# bind final_state = process_command(input, initial_state, total_len,) in
+# 
+# bind _a = print_str("Part 1 Final Position: ",) in
+# bind _b = print_int(final_state.pos,) in
+# bind _c = print_str("\nPart 2 Zero Count: ",) in
+# bind _d = print_int(final_state.zero_count,) in
+print_str("\n",);

@@ -77,7 +77,7 @@ pub fn sema(program: Expr, ctx: Context) void {
         },
         .bool_ => |bool_expr| {
             switch (bool_expr) {
-                .eql, .gt, .lt => |expr| {
+                .eql, .ge, .gt, .lt, .le, .and_, .or_ => |expr| {
                     sema(expr.lhs.*, ctx);
                     sema(expr.rhs.*, ctx);
                 },
@@ -178,7 +178,7 @@ fn add_structs(program: Expr, ctx: *Context) !void {
         },
         .bool_ => |expr| {
             switch (expr) {
-                .eql, .gt, .lt => |bool_expr| {
+                .eql, .gt, .ge, .lt, .le, .and_, .or_ => |bool_expr| {
                     try add_structs(bool_expr.lhs.*, ctx);
                     try add_structs(bool_expr.rhs.*, ctx);
                 },
@@ -297,7 +297,7 @@ fn eval_fn_call(expr: FnCallExpr, ctx: Context, local_vars: *Vars, cursor: Curso
         const arg_eval = eval(arg, ctx, local_vars);
         assert_of_type(
             arg_eval,
-            arg_eval.tag() == .bool_ or arg_eval.tag() == .arith or arg_eval.tag() == .str,
+            arg_eval.tag() == .bool_ or arg_eval.tag() == .arith or arg_eval.tag() == .str or arg_eval.is_struct_instance(),
         );
         const var_: Var = if (arg_eval.tag() == .bool_)
             .{ .bool_ = arg_eval.as.bool_.constant }
@@ -307,6 +307,8 @@ fn eval_fn_call(expr: FnCallExpr, ctx: Context, local_vars: *Vars, cursor: Curso
             .{ .float = arg_eval.as.arith.float }
         else if (arg_eval.tag() == .str)
             .{ .str = arg_eval.as.str }
+        else if (arg_eval.is_struct_instance())
+            .{ .struct_instance = arg_eval.as.struct_instance }
         else
             panic("unhandled case", .{});
         fn_params.putNoClobber(arg_name, var_) catch unreachable;
@@ -501,22 +503,82 @@ fn eval_bool(expr: BoolExpr, ctx: Context, local_vars: *Vars, cursor: Cursor) Ex
             .cursor = cursor,
             .file_path = ctx.file_path,
         },
-        .eql => |eql_expr| {
+        .eql, .ge, .gt, .le, .lt => |eql_expr| {
             const lhs = eval(eql_expr.lhs.*, ctx, local_vars);
             const rhs = eval(eql_expr.rhs.*, ctx, local_vars);
 
-            assert_of_type(lhs, lhs.tag() == .bool_ or lhs.tag() == .arith);
-            assert_of_type(rhs, rhs.tag() == .bool_ or rhs.tag() == .arith);
-            assert_of_type(lhs, lhs.tag() == rhs.tag());
-
+            assert_of_type(lhs, lhs.tag() == .arith);
+            assert_of_type(rhs, rhs.tag() == .arith);
+            const result: BoolExpr = switch (expr) {
+                .eql => .{ .constant = (lhs.as.arith.int == rhs.as.arith.int) },
+                .ge => .{ .constant = (lhs.as.arith.int >= rhs.as.arith.int) },
+                .gt => .{ .constant = (lhs.as.arith.int > rhs.as.arith.int) },
+                .le => .{ .constant = (lhs.as.arith.int <= rhs.as.arith.int) },
+                .lt => .{ .constant = (lhs.as.arith.int < rhs.as.arith.int) },
+                else => unreachable,
+            };
             return .{
-                .as = .{ .bool_ = .{ .constant = (lhs.as.arith.int == rhs.as.arith.int) } },
+                .as = .{ .bool_ = result },
                 .content = ctx.content,
                 .cursor = cursor,
                 .file_path = ctx.file_path,
             };
         },
-        else => unreachable,
+        .and_ => |bin_expr| {
+            const lhs = eval(bin_expr.lhs.*, ctx, local_vars);
+            assert_of_type(lhs, lhs.tag() == .bool_);
+            if (!lhs.as.bool_.constant) {
+                return .{
+                    .as = .{ .bool_ = .{ .constant = false } },
+                    .content = ctx.content,
+                    .cursor = cursor,
+                    .file_path = ctx.file_path,
+                };
+            }
+
+            const rhs = eval(bin_expr.rhs.*, ctx, local_vars);
+
+            assert_of_type(rhs, rhs.tag() == .bool_);
+
+            const result: BoolExpr = .{
+                .constant = (lhs.as.bool_.constant and rhs.as.bool_.constant),
+            };
+
+            return .{
+                .as = .{ .bool_ = result },
+                .content = ctx.content,
+                .cursor = cursor,
+                .file_path = ctx.file_path,
+            };
+        },
+        .or_ => |bin_expr| {
+            const lhs = eval(bin_expr.lhs.*, ctx, local_vars);
+            assert_of_type(lhs, lhs.tag() == .bool_);
+            if (lhs.as.bool_.constant) {
+                return .{
+                    .as = .{ .bool_ = .{ .constant = true } },
+                    .content = ctx.content,
+                    .cursor = cursor,
+                    .file_path = ctx.file_path,
+                };
+            }
+
+            // panic("rhs executed ", .{});
+            const rhs = eval(bin_expr.rhs.*, ctx, local_vars);
+            assert_of_type(rhs, rhs.tag() == .bool_);
+
+            const result: BoolExpr = .{
+                .constant = (lhs.as.bool_.constant and rhs.as.bool_.constant),
+            };
+
+            return .{
+                .as = .{ .bool_ = result },
+                .content = ctx.content,
+                .cursor = cursor,
+                .file_path = ctx.file_path,
+            };
+        },
+        // else => panic("unhandled for {}", .{expr.tag()}),
     }
 }
 

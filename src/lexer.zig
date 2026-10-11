@@ -98,7 +98,7 @@ pub const Lexer = struct {
             }
             std.debug.print(RED_TAG ++ "^" ++ END_TAG ++ "\n", .{});
 
-            if (builtin.mode != .Debug)
+            if (builtin.mode != .Debug or false)
                 std.process.exit(1)
             else
                 panic("", .{});
@@ -120,7 +120,7 @@ pub const Lexer = struct {
                 l.token = t;
                 l.tokenType = .arith_op;
             },
-            .eql => |t| {
+            .eql, .ge, .gt, .le, .lt, .and_, .or_ => |t| {
                 l.token = t;
                 l.tokenType = .bool_op;
             },
@@ -147,7 +147,8 @@ pub const Lexer = struct {
     /// like next but ignore the output
     pub fn nexti(l: *Lexer) void {
         const found = l.next();
-        std.debug.assert(found);
+        _ = found;
+        // std.debug.assert(found);
     }
 
     /// Return a new lexer with the token set
@@ -185,6 +186,30 @@ pub const Lexer = struct {
                     return true;
                 }
                 l.set_token(.assign);
+                return true;
+            },
+            '>' => {
+                l.clear_append_symbol(x);
+                const n_char = l.current_char();
+                if (n_char == '=') {
+                    _ = l.next_char();
+                    l.name.extend();
+                    l.set_token(.ge);
+                    return true;
+                }
+                l.set_token(.gt);
+                return true;
+            },
+            '<' => {
+                l.clear_append_symbol(x);
+                const n_char = l.current_char();
+                if (n_char == '=') {
+                    _ = l.next_char();
+                    l.name.extend();
+                    l.set_token(.le);
+                    return true;
+                }
+                l.set_token(.lt);
                 return true;
             },
             '-' => {
@@ -278,6 +303,12 @@ pub const Lexer = struct {
                 return true;
             } else if (eql("if", l.name.as_str(l.content))) {
                 l.set_token(.if_);
+                return true;
+            } else if (eql("and", l.name.as_str(l.content))) {
+                l.set_token(.and_);
+                return true;
+            } else if (eql("or", l.name.as_str(l.content))) {
+                l.set_token(.or_);
                 return true;
             } else if (eql("bind", l.name.as_str(l.content))) {
                 l.set_token(.bind);
@@ -433,6 +464,12 @@ const TokenKind = enum {
     // Cmp ops
     eql,
     assign,
+    gt,
+    ge,
+    lt,
+    le,
+    and_,
+    or_,
 
     // Arith ops
     minus,
@@ -476,6 +513,12 @@ const TokenKind = enum {
     pub fn get_str(token: Self) []const u8 {
         return switch (token) {
             .eql => "==",
+            .gt => ">",
+            .ge => ">=",
+            .lt => "<",
+            .le => "<=",
+            .and_ => "and",
+            .or_ => "or",
             .assign => "=",
             .minus => "-",
             .plus => "+",
